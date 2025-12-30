@@ -51,7 +51,23 @@ def run_fusion_bot():
                 time.sleep(300)
                 continue
             
+            # Check Trading Hours (Time Filter)
+            # We use MT5 Symbol Info to get current server time for one symbol
+            # to be accurate with broker time.
+            time_struct = mt5.symbol_info_tick("EURUSD").time
+            server_time = datetime.fromtimestamp(time_struct)
+            current_hour = server_time.hour
+            
+            in_session = settings.SESSION_START_HOUR <= current_hour < settings.SESSION_END_HOUR
+            if not in_session:
+                print(f". [Zzz] Market Closed/Rollover. Server Time: {server_time.strftime('%H:%M')}. Waiting...", end='\r')
+                time.sleep(60)
+                continue
+
             # --- MULTI-ASSET SCANNING LOOP ---
+            # Memory to prevent duplicate trades on same candle
+            if 'processed_signals' not in locals(): processed_signals = {}
+            
             for symbol in settings.SYMBOLS:
                 # 2. Data Ingestion
                 # Fetch latest 500 candles for analysis
@@ -78,7 +94,16 @@ def run_fusion_bot():
                 
                 # 4. Signal Execution
                 if signal:
+                    # One Trade Per Candle Filter
+                    signal_time = signal['timestamp'] # Using validation timestamp (time of candle analyzed)
+                    
+                    if symbol in processed_signals and processed_signals[symbol] == signal_time:
+                        # Already traded this signal on this bar
+                        continue
+                        
                     print(f"\n[$$$] ENTRY SIGNAL: {symbol} {signal['action']} @ {signal['price']}")
+                    processed_signals[symbol] = signal_time # Mark as processed
+                    
                     print(f"      Reason: {signal['reason']}")
                     
                     # Check Risk & Calculate Size
@@ -86,8 +111,13 @@ def run_fusion_bot():
                     entry_price = signal['price']
                     
                     # Dynamic lot size calculation based on risk
-                    lot_size = guardian.calculate_lot_size(entry_price, sl_price, settings.RISK_PER_TRADE, current_balance)
-                    print(f"      Lot Size: {lot_size}")
+                    # Updated for multi-asset support (Gold/Indices)
+                    lot_size = guardian.calculate_lot_size(symbol, entry_price, sl_price, settings.RISK_PER_TRADE, current_balance)
+                    
+                    # Debug Info
+                    account_info = mt5.account_info()
+                    print(f"      [Balance: {account_info.balance} | Free Margin: {account_info.margin_free}]")
+                    print(f"      Calculated Lot Size: {lot_size}")
                     
                     # EXECUTION (LIVE DEMO)
                     if lot_size > 0:

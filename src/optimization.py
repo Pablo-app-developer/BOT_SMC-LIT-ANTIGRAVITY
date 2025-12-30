@@ -23,48 +23,51 @@ def simulate_trade_vectorized(df, entries, sl_pips, rr_ratio):
     Simula trades de forma vectorizada usando Pandas/Numpy.
     Retorna: Net Profit (R-Multiples)
     """
-    # Convert pips to price diff (approximated for EURUSD 4th decimal)
+    # Convert pips to price diff
     sl_dist = sl_pips * 0.0001
     tp_dist = sl_dist * rr_ratio
     
     # Get entry prices
-    entry_prices = df.loc[entries, 'Close'].values
-    entry_indices = np.where(entries)[0]
+    entry_prices = df.loc[entries != 0, 'Close'].values
+    entry_directions = entries[entries != 0].values # 1 for Buy, -1 for Sell
+    entry_indices = np.where(entries != 0)[0]
     
     if len(entry_indices) == 0:
         return 0.0
     
     wins = 0
     losses = 0
-    breakevens = 0
     
-    # Iterar sobre cada señal (Vectorizar el loop entero es complejo sin VBT, 
-    # pero un loop simple sobre <1000 señales es instantáneo)
-    
-    closes = df['Close'].values
     highs = df['High'].values
     lows = df['Low'].values
     
     for i, idx in enumerate(entry_indices):
         entry_price = entry_prices[i]
-        tp_price = entry_price + tp_dist # Assuming LONG (Adapt logic if SHORT)
-        sl_price = entry_price - sl_dist
+        direction = entry_directions[i]
+        
+        if direction == 1: # BUY
+            tp_price = entry_price + tp_dist
+            sl_price = entry_price - sl_dist
+        else: # SELL
+            tp_price = entry_price - tp_dist
+            sl_price = entry_price + sl_dist
         
         # Look forward
-        # Optimistic: Check High/Low of same candle first? No, next candle.
         future_highs = highs[idx+1:]
         future_lows = lows[idx+1:]
         
-        # Find first index where Low < SL or High > TP
-        # We use argmax to find first True
-        
-        # Check SL hit
-        sl_hits = future_lows < sl_price
-        # Check TP hit
-        tp_hits = future_highs > tp_price
+        if len(future_highs) == 0: continue
+            
+        # Find hits
+        if direction == 1: # BUY
+            sl_hits = future_lows < sl_price
+            tp_hits = future_highs > tp_price
+        else: # SELL
+            sl_hits = future_highs > sl_price  # Stop Hit (High goes above SL)
+            tp_hits = future_lows < tp_price   # TP Hit (Low goes below TP)
         
         if not sl_hits.any() and not tp_hits.any():
-            continue # Trade still open at end of data
+            continue 
             
         first_sl = np.argmax(sl_hits) if sl_hits.any() else 999999
         first_tp = np.argmax(tp_hits) if tp_hits.any() else 999999
@@ -74,8 +77,6 @@ def simulate_trade_vectorized(df, entries, sl_pips, rr_ratio):
         else:
             losses += 1
             
-    # Calculate Expectancy using R-Multiples
-    # Win = +RR R, Loss = -1 R
     total_r = (wins * rr_ratio) - (losses * 1.0)
     return total_r
 
@@ -89,8 +90,9 @@ def run_optimization():
     # Fetch significant history
     # 10k bars is fast now with vectorized logic
     N_BARS = 10000 
-    print(f"Fetching last {N_BARS} candles for {settings.SYMBOL}...")
-    df = bridge.get_data(settings.SYMBOL, settings.TIMEFRAME_LTF, n_bars=N_BARS)
+    TARGET_SYMBOL = "EURUSD" # Optimize on EURUSD
+    print(f"Fetching last {N_BARS} candles for {TARGET_SYMBOL}...")
+    df = bridge.get_data(TARGET_SYMBOL, settings.TIMEFRAME_LTF, n_bars=N_BARS)
     bridge.shutdown()
     
     if df is None: return

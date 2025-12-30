@@ -138,7 +138,7 @@ class MT5Handler:
             "magic": 123456,
             "comment": "Fusion Bot Algo",
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
+            "type_filling": mt5.ORDER_FILLING_FOK,
         }
         
         result = mt5.order_send(request)
