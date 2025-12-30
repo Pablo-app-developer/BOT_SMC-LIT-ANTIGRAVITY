@@ -1,9 +1,11 @@
-
 import sys
 import time
 import os
 # Add parent dir to sys path to locate config and src if run from src
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from datetime import datetime
+import MetaTrader5 as mt5
 
 from config import settings
 from src.smc_analyst import SMCAnalyst
