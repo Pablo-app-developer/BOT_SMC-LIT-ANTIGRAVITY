@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  fusion-bot:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+    container_name: fusion_bot_v1
+    restart: always
+    volumes:
+      - ../config:/app/config
+      - ../src:/app/src
+    environment:
+      - MT5_LOGIN=${MT5_LOGIN}
+      - MT5_PASSWORD=${MT5_PASSWORD}
+      - MT5_SERVER=${MT5_SERVER}

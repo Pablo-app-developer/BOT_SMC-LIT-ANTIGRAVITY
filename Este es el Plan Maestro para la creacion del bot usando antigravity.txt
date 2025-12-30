@@ -1,0 +1,109 @@
+Este es el Plan Maestro de Ingeniería (Blueprint) detallado. Está diseñado específicamente para que lo copies y pegues directamente en el "Manager Surface" (Mission Control) de Google Antigravity.
+
+Este plan instruye a los agentes de Gemini 3.0 para que construyan la arquitectura modular requerida, seleccionen las librerías correctas (evitando la necesidad de Redes Neuronales complejas por ahora) y preparen el entorno de despliegue con Docker y MetaTrader 5.
+
+1. El "Mega-Prompt" para Google Antigravity
+Copia y pega el siguiente bloque en tu ventana de chat inicial de Antigravity. Este prompt define la "personalidad" del proyecto y orquesta la creación de los agentes especializados.
+
+MISSION: PROJECT FUSION-BOT ARCHITECTURE
+Actúa como Arquitecto de Software Principal. Vamos a construir un sistema de trading algorítmico de alta frecuencia para Forex (EURUSD) basado en la metodología "Fusion Concepts" (SMC + Liquidity Inducement).
+
+El objetivo es un sistema modular en Python, desplegable en Docker, que se conecte a MetaTrader 5 (MT5).
+
+1. DEFINICIÓN DE AGENTES
+Quiero que "spawnees" (generes) y coordines los siguientes 3 agentes especializados para este workspace:
+
+AGENTE 1: "SMC_Analyst" (Logic & Pattern Recognition)
+Rol: Encargado de la lógica de análisis técnico pura.
+
+Librería Principal: smartmoneyconcepts (Python).
+
+Tareas:
+
+Implementar detección de Swing Highs/Lows y CHOCH (Change of Character).
+
+Codificar la función detect_trap_block() que identifique bloques de órdenes fallidos tras 2 rompimientos de estructura (BOS).
+
+Implementar la lógica de "Ráfagas" (Burst): Entradas secuenciales tras la confirmación de liquidez.
+
+AGENTE 2: "Execution_Bridge" (MT5 Connectivity)
+Rol: Gestión de conexión con el broker y órdenes.
+
+Librería Principal: MetaTrader5 (Python package).
+
+Tareas:
+
+Crear una clase MT5Handler robusta que maneje la reconexión automática.
+
+Implementar funciones de gestión de órdenes avanzadas: place_limit_order, modify_stop_loss_to_be (Break Even), y partial_close.
+
+Asegurar que el bot pueda operar en un entorno Linux (Docker) usando Wine si es necesario.
+
+AGENTE 3: "Risk_Guardian" (Risk & Psychology)
+Rol: Gestión de capital estricta (Hard-coded rules).
+
+Tareas:
+
+Implementar un "Kill Switch" diario: Si daily_loss >= 2%, detener el bot por 24h.
+
+Lógica de "Free Rolling": Una vez que la Entrada 1 está en ganancia, financiar el riesgo de las "Ráfagas" (entradas 2 y 3) con el profit flotante.
+
+2. INSTRUCCIONES TÉCNICAS INICIALES
+Genera un archivo requirements.txt que incluya: pandas, numpy, MetaTrader5, smartmoneyconcepts, pytz.
+
+Crea la estructura de carpetas: /src (código fuente), /config (parámetros), /docker (Dockerfiles).
+
+No utilices Machine Learning ni Redes Neuronales por el momento; la estrategia es mecánica basada en reglas estrictas de acción del precio.
+
+2. Detalles Técnicos y Librerías (Para tu conocimiento)
+Aquí te explico por qué le pedimos esto a Antigravity y cómo responder a las dudas técnicas que planteaste.
+
+A. Librerías Específicas (smartmoneyconcepts)
+Para no reinventar la rueda, utilizaremos una librería de Python existente y muy potente llamada smartmoneyconcepts.
+
+¿Qué hace?: Ya trae funciones pre-programadas para detectar Fair Value Gaps (FVG), Order Blocks (OB), Swing Highs/Lows y CHOCH.
+
+Tu ventaja: En lugar de programar desde cero qué es un "bloque de órdenes", el Agente 1 solo tendrá que "llamar" a la función smc.ob(ohlc) y luego aplicarle los filtros de la estrategia Fusion (ej. "¿Este bloque tiene liquidez previa?").
+
+B. ¿Machine Learning o Redes Neuronales?
+Respuesta corta: No son necesarias para la Fase 1.
+
+Por qué: La estrategia Fusion (Fase 1 y 2) es mecánica. Se basa en reglas de "Si ocurre X (BOS) y luego Y (Liquidez), entonces Z (Entrada)". Las redes neuronales son mejores para predecir probabilidades difusas, pero en SMC buscamos precisión estructural exacta.
+
+El Riesgo: Usar ML desde el principio añade una "caja negra" que hace difícil saber por qué el bot tomó una operación. Es mejor codificar las reglas estrictas ("Hard-coded") primero. Antigravity usará su propia IA (Gemini) para escribir el código, pero el código resultante será lógica determinista de Python, no una red neuronal tomando decisiones.
+
+C. Integración con MetaTrader 5 (MT5)
+El estándar de oro para Forex retail es MT5, y tiene una librería nativa de Python (MetaTrader5) excelente.
+
+El Reto: Esta librería está diseñada para Windows.
+
+La Solución: Para correrlo en servidores (que suelen ser Linux), necesitamos un entorno especial.
+
+3. Solución de Despliegue: Docker + Wine (La opción profesional)
+Como mencionaste la opción de Docker, esta es la arquitectura que el Agente 2 debe construir. Es la forma más profesional de tener tu bot corriendo 24/7 en la nube (AWS, Google Cloud, VPS) sin necesitar una PC encendida en casa.
+
+Arquitectura del Contenedor ("Containerized MT5")
+Le pediremos a Antigravity que genere un Dockerfile basado en una imagen que tenga Wine instalado. Wine es una capa de compatibilidad que permite ejecutar programas de Windows (como MT5) en Linux.
+
+Instrucción para Antigravity (si te pide detalles del Dockerfile):
+
+"Utiliza como base una imagen de docker que soporte Wine (como msjpq/wine-vnc o construye una personalizada con Debian + Wine). Necesitamos instalar Python 3.10 dentro del entorno Wine para que el script pueda 'hablar' con la terminal MT5.exe que se estará ejecutando en modo 'headless' (sin monitor)."
+
+Alternativa Simplificada (Si Docker se complica): Si la configuración de Docker con Wine resulta demasiado compleja inicialmente, puedes pedirle a Antigravity que use la librería MetaAPI. Es un servicio de pago (barato) que hace de puente en la nube. Tú le das tus credenciales de broker y ellos te dan una API REST. Esto elimina la necesidad de instalar MT5 y Wine en tu servidor, simplificando el código drásticamente.
+
+4. Flujo de Trabajo en Antigravity
+Homebase (Inbox): Pega el Mega-Prompt del punto 1.
+
+Revisión del Plan: Antigravity generará un "Implementation Plan". Revisa que haya creado los 3 agentes.
+
+Ejecución:
+
+Verás al SMC_Analyst creando archivos como indicators.py.
+
+Verás al Execution_Bridge creando mt5_connector.py.
+
+Prueba (Backtest): Antes de conectar dinero real, pide al Agente 1 que corra un backtest.
+
+Prompt: "Agente 1, descarga data histórica de EURUSD M15 del último año y ejecuta la lógica de detección de Trampas. Genera un gráfico mostrando dónde habrían sido las entradas."
+
+Este plan aprovecha la capacidad "Agentic" de Antigravity  para que no tengas que escribir el código línea por línea, sino orquestar la construcción del sistema como un arquitecto.
