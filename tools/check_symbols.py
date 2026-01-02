@@ -13,7 +13,7 @@ def find_symbols():
     print("\n🔍 BUSCANDO SÍMBOLOS DISPONIBLES EN TU BROKER...\n")
     
     # Filter keywords
-    keywords = ['BTC', 'ETH', '100', '500', 'NAS', 'TEC', 'SPX', 'USD']
+    keywords = ['ETH', '100', '500', 'NAS', 'TEC', 'SPX', 'USD']
     found = []
     
     for s in symbols:

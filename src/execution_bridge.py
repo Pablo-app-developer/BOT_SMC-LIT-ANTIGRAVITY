@@ -35,6 +35,14 @@ class MT5Handler:
         print("Connected to MT5 Terminal")
         return True
 
+    def get_account_info(self):
+        """
+        Returns the account info object (balance, equity, margin).
+        """
+        if not self.connected:
+            self.connect()
+        return mt5.account_info()
+
     def get_data(self, symbol, timeframe, n_bars=1000):
         """
         Fetches historical data.
@@ -160,6 +168,53 @@ class ExecutionManager:
         self.burst_trades = [] # List of Ticket IDs
         self.active_trap = None # ID of the trap we are trading
 
+    def update_trailing_stops(self):
+        """
+        [Auto-Protection] Move SL to Break Even if price moves 1R in favor.
+        """
+        # Get active positions for this bot (Magic Number filter recommended if set)
+        positions = mt5.positions_get() # In live, filter by magic or symbol list if needed
+        if not positions: return
+
+        for pos in positions:
+            symbol = pos.symbol
+            if symbol not in settings.SYMBOLS: continue # Only manage our symbols
+            
+            entry_price = pos.price_open
+            current_sl = pos.sl
+            is_buy = pos.type == mt5.ORDER_TYPE_BUY
+            
+            # Dynamic 1R Calculation
+            # If we don't know original risk, we estimate it or use 20 pips default
+            # Better: Use the distance to initial SL. But SL changes.
+            # Strategy: If current profit > 20 pips (0.0020), move to BE.
+            
+            # Using Fixed Threshold for Robustness: 20 Pips Profit triggers BE
+            be_trigger = 0.0020 
+            
+            tick = mt5.symbol_info_tick(symbol)
+            if not tick: continue
+            
+            current_price = tick.bid if is_buy else tick.ask
+            profit_dist = (current_price - entry_price) if is_buy else (entry_price - current_price)
+            
+            if profit_dist >= be_trigger:
+                # Check if not already at BE
+                at_be = (is_buy and current_sl >= entry_price) or (not is_buy and current_sl <= entry_price and current_sl != 0.0)
+                
+                if not at_be:
+                    print(f"      [BE] Securing {symbol} (Profit > 20 pips). Moving SL to {entry_price}")
+                    
+                    request = {
+                        "action": mt5.TRADE_ACTION_SLTP,
+                        "position": pos.ticket,
+                        "symbol": symbol,
+                        "sl": entry_price, # Move to Entry
+                        "tp": pos.tp
+                    }
+                    res = mt5.order_send(request)
+                    if res.retcode != mt5.TRADE_RETCODE_DONE:
+                        print(f"      [BE] Failed: {res.comment}")
     def register_primary_entry(self, ticket):
         self.primary_trade = ticket
         print(f"ExecManager: Registered Primary Trade #{ticket}")
@@ -202,41 +257,4 @@ class ExecutionManager:
             
         return False
 
-    def update_trailing_stops(self, current_price, bridge_handler):
-        """
-        Logic to move SL to Break Even ('Free Rolling').
-        Trigger: When price moves 1R in our favor.
-        """
-        if not self.primary_trade: return
-        
-        positions = mt5.positions_get(ticket=self.primary_trade)
-        if not positions: return
-        pos = positions[0]
-        
-        # 1R Logic (Simplified: 20 pips or similar, should be config based)
-        # For now, let's say if we are 0.2% in profit
-        entry = pos.price_open
-        is_buy = pos.type == mt5.ORDER_TYPE_BUY
-        
-        profit_pct = (current_price - entry) / entry if is_buy else (entry - current_price) / entry
-        
-        # Threshold to move to BE (e.g., 0.15% move)
-        BE_THRESHOLD = 0.0015 
-        
-        if profit_pct > BE_THRESHOLD:
-            # Check if already at BE to avoid spamming modification
-            if (is_buy and pos.sl < entry) or (not is_buy and (pos.sl == 0 or pos.sl > entry)):
-                print(f"Securing Profit! Moving SL to BE for Trade #{self.primary_trade}")
-                
-                # Call MT5 modify
-                request = {
-                    "action": mt5.TRADE_ACTION_SLTP,
-                    "position": pos.ticket,
-                    "symbol": pos.symbol,
-                    "sl": entry, # Move to Entry
-                    "tp": pos.tp
-                }
-                
-                res = mt5.order_send(request)
-                if res.retcode != mt5.TRADE_RETCODE_DONE:
-                    print(f"Failed to move SL: {res.comment}")
+

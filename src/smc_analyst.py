@@ -8,20 +8,17 @@ class SMCAnalyst:
     Estrategia: Liquidity Sweep + Range Reclaim (Turtle Soup Pattern)
     """
 
-    def __init__(self, swing_lookback=20):
-        # Lookback aumentado: Buscamos liquidez significativa, no ruido de 1 vela.
-        # 20 velas M15 = 5 horas de rango. Perfecto para sesiones.
+    def __init__(self, swing_lookback=96):
+        # 96 velas M15 = 24 horas (Daily Cycle)
         self.swing_lookback = swing_lookback 
-        print(f"SMC_Analyst Pro initialized (Liquidity Window={swing_lookback}).")
+        print(f"SMC_Analyst Pro initialized (Daily Liquidity Window={swing_lookback}).")
 
-    def analyze(self, df: pd.DataFrame):
+    def analyze(self, df: pd.DataFrame, trend_bias=0):
         """
-        Analiza el dataframe en busca de setups de 'Sweep & Reclaim' en la vela actual.
+        Analiza setups con Liquidez Diaria + Reclamo.
         """
-        # Calcular señales solo para la última vela (Live Trading)
-        signal = self._check_candle_signal(df, -1)
+        signal = self._check_candle_signal(df, -1, trend_bias)
         
-        # Para visualización/debug, podríamos retornar niveles clave
         last_high = df['High'].iloc[-self.swing_lookback-1:-1].max()
         last_low = df['Low'].iloc[-self.swing_lookback-1:-1].min()
         
@@ -30,24 +27,11 @@ class SMCAnalyst:
             'signal': signal
         }
 
-    def _check_candle_signal(self, df, idx):
-        """
-        Verifica si la vela en 'idx' completó un patrón de Sweep & Reclaim.
-        """
+    def _check_candle_signal(self, df, idx, trend_bias=0):
         if len(df) < self.swing_lookback + 2: return None
         
-        # Datos de la vela actual (o la que analizamos)
         current = df.iloc[idx]
-        prev_close = df['Close'].iloc[idx-1] # Para confirmar momentum si quisiéramos
         
-        # 1. Definir Rango de Liquidez PREVIO a esta vela
-        # Miramos hacia atrás desde la vela anterior (idx-1)
-        # No incluimos la vela actual en el cálculo del rango, porque ella es la que rompe.
-        
-        # Slice range: from (idx - lookback) to (idx)
-        # Note: iloc slicing excludes end, so idx means up to idx-1
-        
-        # Ajuste de índices para funcionar tanto con idx negativo (live) como positivo (backtest)
         if idx < 0:
             window = df.iloc[idx - self.swing_lookback : idx]
         else:
@@ -58,40 +42,45 @@ class SMCAnalyst:
         liq_high = window['High'].max()
         liq_low = window['Low'].min()
         
-        # 2. Lógica de Bear Trap (Buy Signal)
-        # El precio rompe el mínimo (toma liquidez venta) pero cierra ARRIBA del mínimo.
-        # Condición extra: La vela debe ser alcista (Close > Open) para confirmar rechazo.
+        # Métricas de la vela
+        open_p, close_p, high_p, low_p = current['Open'], current['Close'], current['High'], current['Low']
+        total_range = high_p - low_p
+        if total_range == 0: return None
         
-        is_bullish_candle = current['Close'] > current['Open']
+        is_bullish = close_p > open_p
+        is_bearish = close_p < open_p
         
-        if current['Low'] < liq_low and current['Close'] > liq_low and is_bullish_candle:
-            # Filtro opcional: ¿El barrido fue significativo o solo 0.1 pip?
-            # Para M15, pedimos al menos 1 pip de sweep para evitar ruido de spread
-            # sweep_size = liq_low - current['Low']
-            # if sweep_size > 0.0001: ...
-            
-            return {
-                'action': 'BUY',
-                'price': current['Close'],
-                'sl': current['Low'], # SL en la mecha que hizo el barrido
-                'reason': 'LIQUIDITY_RAID_BUY',
-                'timestamp': current.name
-            }
-
-        # 3. Lógica de Bull Trap (Sell Signal)
-        # El precio rompe el máximo (toma liquidez compra) pero cierra ABAJO del máximo.
-        # Condición extra: Vela bajista.
+        # --- FILTRO PRO: DESPLAZAMIENTO > 0.7 ---
         
-        is_bearish_candle = current['Close'] < current['Open']
-        
-        if current['High'] > liq_high and current['Close'] < liq_high and is_bearish_candle:
-            return {
-                'action': 'SELL',
-                'price': current['Close'],
-                'sl': current['High'], # SL en la mecha superior
-                'reason': 'LIQUIDITY_RAID_SELL',
-                'timestamp': current.name
-            }
+        # SEÑAL COMPRA
+        if trend_bias >= 0:
+            if low_p < liq_low and close_p > liq_low and is_bullish:
+                strength = (close_p - low_p) / total_range
+                
+                # Exigimos cierre en el 30% SUPERIOR (Fuerza > 0.7 desde el bajo)
+                if strength > 0.7: 
+                    return {
+                        'action': 'BUY',
+                        'price': close_p,
+                        'sl': low_p - 0.0005, # Buffer 5 pips
+                        'reason': 'DAILY_LOW_SWEEP_STRONG',
+                        'timestamp': current.name
+                    }
+                    
+        # SEÑAL VENTA
+        if trend_bias <= 0:
+            if high_p > liq_high and close_p < liq_high and is_bearish:
+                strength = (high_p - close_p) / total_range
+                
+                # Exigimos cierre en el 30% INFERIOR (Fuerza > 0.7 desde el alto)
+                if strength > 0.7:
+                    return {
+                        'action': 'SELL',
+                        'price': close_p,
+                        'sl': high_p + 0.0005, # Buffer 5 pips
+                        'reason': 'DAILY_HIGH_SWEEP_STRONG',
+                        'timestamp': current.name
+                    }
             
         return None
 

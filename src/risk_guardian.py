@@ -30,75 +30,73 @@ class RiskGuardian:
         
     def calculate_lot_size(self, symbol, entry_price, stop_loss, risk_pct, account_balance):
         """
-        Calculates position size based on risk percentage and stop loss distance.
-        Uses MT5 symbol info for accurate multi-asset sizing.
+        Calculates position size using the Master Formula (Risk / TickVal).
+        Mathematically precise for ANY asset (Forex, Crypto, Metals).
         """
-        # Ensure MT5 is initialized, though main usually does this
+        # Ensure MT5 is initialized
         import MetaTrader5 as mt5 
         if not mt5.initialize(): return 0.0
 
         if entry_price == 0 or stop_loss == 0: return 0.0
         
-        # 1. Get Symbol Properties
+        # 1. Get real data
         info = mt5.symbol_info(symbol)
-        if info is None:
-            print(f"RiskGuardian: Symbol {symbol} not found")
+        if info is None: return 0.0
+        
+        # 2. Risk in Cash
+        risk_amount_cash = account_balance * risk_pct
+        
+        # 3. Stop Loss Distance
+        points_at_risk = abs(entry_price - stop_loss)
+        
+        # Safety check for tiny SL (avoid division by infinity)
+        if points_at_risk < info.point: 
             return 0.0
             
-        contract_size = info.trade_contract_size
-        tick_size = info.trade_tick_size
+        # 4. Correct Tick Value Calculation
         tick_value = info.trade_tick_value
+        tick_size = info.trade_tick_size
+        
+        if tick_size == 0 or tick_value == 0: return 0.0
+        
+        # MASTER FORMULA:
+        # LotSize = RiskCash / ( (PointsAtRisk / TickSize) * TickValue )
+        # explanation: (Points / TickSize) = Number of Ticks
+        # Number of Ticks * TickValue = Loss per 1.0 Lot
+        
+        loss_per_lot = (points_at_risk / tick_size) * tick_value
+        
+        if loss_per_lot == 0: return 0.0
+        
+        raw_lot_size = risk_amount_cash / loss_per_lot
+        
+        # 5. Normalize
+        step = info.volume_step
         min_vol = info.volume_min
         max_vol = info.volume_max
-        step_vol = info.volume_step
         
-        # 2. Calculate Risk Amount (Cash)
-        risk_cash = account_balance * risk_pct
-        
-        # 3. Calculate Stop Loss Distance in points
-        # SAFETY CHECK: Enforce minimum SL distance of 10 pips (0.0010) 
-        # to avoid "Invalid Stops" and crazy lot sizes on small candles.
-        min_sl_dist = 0.0010  # 10 pips for Forex
-        price_diff = abs(entry_price - stop_loss)
-        
-        if price_diff < min_sl_dist:
-            # print(f"      [Guardian] Adjusting SL from {price_diff:.5f} to {min_sl_dist} (Min 10 pips)")
-            price_diff = min_sl_dist
-            # Note: We don't change the actual order SL here, just the risk calculation.
-            # ideally we should tell main to push SL further away.
-        
-        loss_per_lot = (price_diff / tick_size) * tick_value
-        
-        if loss_per_lot == 0: return min_vol
-        
-        # 4. Normalize Volume
-        
-        # [NEW] MARGIN CHECK
-        # Calculate Margin required for this volume
+        if step > 0:
+            final_lot = round(raw_lot_size / step) * step
+        else:
+            final_lot = raw_lot_size
+            
+        # 6. Margin Check (Final Guard)
         try:
-            margin_req = mt5.order_calc_margin(mt5.ORDER_TYPE_BUY, symbol, volume, entry_price)
+            margin_req = mt5.order_calc_margin(mt5.ORDER_TYPE_BUY, symbol, final_lot, entry_price)
             account_info = mt5.account_info()
-            
             if margin_req and account_info and margin_req > account_info.margin_free:
-                # Reduce volume to fit free margin (leaving 5% buffer)
-                # MaxVolume = (FreeMargin * 0.95) / MarginPerUnit * Volume 
-                # Simplification: Scale down
-                scale_factor = (account_info.margin_free * 0.90) / margin_req
-                volume = volume * scale_factor
-                # print(f"      [Guardian] Not enough margin. Scaling down to {volume:.2f} lots")
-        except Exception as e:
-            print(f"      [Guardian] Margin check error: {e}")
-
-        # Clip to limits (HARD CAP 1.0 LOT FOR SAFETY)
-        sane_max = 1.0
-        volume = max(min_vol, min(volume, sane_max, max_vol))
-        
-        # Round to step
-        # E.g. 0.123 -> 0.12 if step is 0.01
-        if step_vol > 0:
-            volume = round(volume / step_vol) * step_vol
+                # Resize to fit margin
+                scale = (account_info.margin_free * 0.95) / margin_req
+                final_lot = final_lot * scale
+                # Re-round
+                if step > 0: final_lot = round(final_lot / step) * step
+        except:
+            pass
             
-        return round(volume, 2)
+        # Final Limits
+        final_lot = max(min_vol, min(final_lot, max_vol))
+        
+        return round(final_lot, 2)
         
     def can_trade(self):
         return self.is_trading_allowed
