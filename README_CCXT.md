@@ -38,18 +38,18 @@ API_PASSWORD=tu_password_aqui  # Solo para Gate.io, OKX
 **Opción B - Manual (cualquier sistema):**
 ```bash
 # Conectarse al VPS
-ssh root@107.174.133.202
+ssh root@107.174.133.37
 
 # Crear directorio
 mkdir -p /root/smc_bot
 
 # Copiar archivos (desde tu PC local)
-scp Dockerfile.ccxt root@107.174.133.202:/root/smc_bot/
-scp docker-compose.ccxt.yml root@107.174.133.202:/root/smc_bot/docker-compose.yml
-scp requirements_ccxt.txt root@107.174.133.202:/root/smc_bot/
-scp .env.ccxt root@107.174.133.202:/root/smc_bot/.env
-scp -r config root@107.174.133.202:/root/smc_bot/
-scp -r src root@107.174.133.202:/root/smc_bot/
+scp Dockerfile.ccxt root@107.174.133.37:/root/smc_bot/
+scp docker-compose.ccxt.yml root@107.174.133.37:/root/smc_bot/docker-compose.yml
+scp requirements_ccxt.txt root@107.174.133.37:/root/smc_bot/
+scp .env.ccxt root@107.174.133.37:/root/smc_bot/.env
+scp -r config root@107.174.133.37:/root/smc_bot/
+scp -r src root@107.174.133.37:/root/smc_bot/
 
 # En el VPS, construir y ejecutar
 cd /root/smc_bot
@@ -61,13 +61,13 @@ docker-compose up -d
 
 ```bash
 # Ver logs en tiempo real
-ssh root@107.174.133.202 'docker logs -f smc_trading_bot'
+ssh root@107.174.133.37 'docker logs -f smc_trading_bot'
 
 # Ver estado
-ssh root@107.174.133.202 'docker ps'
+ssh root@107.174.133.37 'docker ps'
 
 # Ver uso de recursos
-ssh root@107.174.133.202 'docker stats smc_trading_bot'
+ssh root@107.174.133.37 'docker stats smc_trading_bot'
 ```
 
 ## 🎛️ Configuración

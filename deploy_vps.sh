@@ -6,7 +6,7 @@ set -e
 echo "🚀 Desplegando bot al VPS..."
 
 # Variables
-VPS_IP="107.174.133.202"
+VPS_IP="107.174.133.37"
 VPS_USER="root"
 REMOTE_DIR="/root/smc_bot"
 

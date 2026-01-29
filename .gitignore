@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credenciales y configuración sensible
+vps_credentials.ps1
+.env
+.env.local
+.env.ccxt
+*.pem
+*.key
+secrets.json
+
+# Logs y datos
+*.log
+bot_journal.csv
+*.csv
+
+# Modelos y datos grandes
+*.h5
+*.pkl
+*.joblib
+models/
+data/

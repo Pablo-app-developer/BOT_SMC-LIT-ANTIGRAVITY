@@ -1,63 +1,79 @@
-# Script de despliegue para Windows PowerShell
-# Despliegue ultra-rápido al VPS
+# Script de despliegue AUTOMATIZADO - Sin contraseñas
+# Requiere haber ejecutado setup_ssh_key.ps1 primero
 
-$VPS_IP = "107.174.133.202"
-$VPS_USER = "root"
-$VPS_PASS = "8NI8OmrT2rCnz5U6k0"
-$REMOTE_DIR = "/root/smc_fusion_ccxt"
-
-Write-Host "🚀 Desplegando SMC FUSION CCXT al VPS..." -ForegroundColor Green
-
-# Función para ejecutar comandos SSH
-function SSH-Exec {
-    param([string]$Command)
-    echo $VPS_PASS | plink -batch -pw $VPS_PASS ${VPS_USER}@${VPS_IP} $Command
+# Cargar credenciales
+if (Test-Path ".\vps_credentials.ps1") {
+    . .\vps_credentials.ps1
+}
+else {
+    Write-Host "Error: No se encontro vps_credentials.ps1" -ForegroundColor Red
+    exit 1
 }
 
-function SCP-Copy {
-    param([string]$LocalFile, [string]$RemotePath)
-    echo $VPS_PASS | pscp -batch -pw $VPS_PASS $LocalFile "${VPS_USER}@${VPS_IP}:${RemotePath}"
+Write-Host "Desplegando SMC FUSION CCXT al VPS..." -ForegroundColor Green
+Write-Host ""
+
+# Verificar conexión SSH
+Write-Host "[1/7] Verificando conexion SSH..." -ForegroundColor Cyan
+$testConnection = ssh root@${VPS_IP} "echo OK" 2>&1
+if ($testConnection -notlike "*OK*") {
+    Write-Host "Error: No se pudo conectar al VPS" -ForegroundColor Red
+    Write-Host "Verifica que setup_ssh_key.ps1 se haya ejecutado correctamente" -ForegroundColor Yellow
+    exit 1
 }
+Write-Host "Conexion OK" -ForegroundColor Green
 
-Write-Host "📁 Preparando directorios en VPS..." -ForegroundColor Cyan
+# Preparar directorios
+Write-Host "[2/7] Preparando directorios..." -ForegroundColor Cyan
+ssh root@${VPS_IP} "rm -rf ${REMOTE_DIR}; mkdir -p ${REMOTE_DIR}/config ${REMOTE_DIR}/src"
 
-# Limpiar y crear directorios
-ssh root@${VPS_IP} "rm -rf ${REMOTE_DIR} && mkdir -p ${REMOTE_DIR}/config ${REMOTE_DIR}/src"
+# Copiar archivos en batch
+Write-Host "[3/7] Copiando archivos..." -ForegroundColor Cyan
+scp -q Dockerfile.ccxt "root@${VPS_IP}:${REMOTE_DIR}/"
+scp -q docker-compose.ccxt.yml "root@${VPS_IP}:${REMOTE_DIR}/docker-compose.yml"
+scp -q requirements_ccxt.txt "root@${VPS_IP}:${REMOTE_DIR}/"
+scp -q .env.ccxt "root@${VPS_IP}:${REMOTE_DIR}/.env.ccxt"
+scp -q config/settings_ccxt.py "root@${VPS_IP}:${REMOTE_DIR}/config/"
+scp -q config/__init__.py "root@${VPS_IP}:${REMOTE_DIR}/config/"
+scp -q src/main_ccxt.py "root@${VPS_IP}:${REMOTE_DIR}/src/"
+Write-Host "Archivos copiados" -ForegroundColor Green
 
-Write-Host "📦 Copiando archivos esenciales..." -ForegroundColor Cyan
+# Verificar Docker Compose
+Write-Host "[4/7] Verificando Docker..." -ForegroundColor Cyan
+$dockerVersion = ssh root@${VPS_IP} "docker-compose --version 2>&1"
+Write-Host "Docker Compose: $dockerVersion" -ForegroundColor Gray
 
-# Copiar archivos uno por uno usando SCP
-scp Dockerfile.ccxt "root@${VPS_IP}:${REMOTE_DIR}/"
-scp docker-compose.ccxt.yml "root@${VPS_IP}:${REMOTE_DIR}/docker-compose.yml"
-scp requirements_ccxt.txt "root@${VPS_IP}:${REMOTE_DIR}/"
-scp .env.ccxt "root@${VPS_IP}:${REMOTE_DIR}/.env"
-scp config/settings_ccxt.py "root@${VPS_IP}:${REMOTE_DIR}/config/"
-scp src/main_ccxt.py "root@${VPS_IP}:${REMOTE_DIR}/src/"
-
-# Crear __init__.py
-ssh root@${VPS_IP} "echo '# Config module' > ${REMOTE_DIR}/config/__init__.py"
-
-Write-Host "🐳 Construyendo imagen Docker (ultra-liviana)..." -ForegroundColor Yellow
-
-# Detener contenedor anterior si existe
-ssh root@${VPS_IP} "cd ${REMOTE_DIR} && docker-compose down 2>/dev/null || true"
-
-# Limpiar imágenes antiguas para ahorrar espacio
-ssh root@${VPS_IP} "docker system prune -f"
+# Detener contenedor anterior
+Write-Host "[5/7] Limpiando contenedores antiguos..." -ForegroundColor Cyan
+ssh root@${VPS_IP} "cd ${REMOTE_DIR}; docker-compose down 2>/dev/null || true"
+ssh root@${VPS_IP} "docker system prune -f -a --volumes 2>/dev/null || true"
 
 # Construir imagen
-ssh root@${VPS_IP} "cd ${REMOTE_DIR} && docker-compose build --no-cache"
+Write-Host "[6/7] Construyendo imagen Docker..." -ForegroundColor Yellow
+ssh root@${VPS_IP} "cd ${REMOTE_DIR}; docker-compose build"
 
-Write-Host "▶️  Iniciando bot..." -ForegroundColor Green
-ssh root@${VPS_IP} "cd ${REMOTE_DIR} && docker-compose up -d"
+# Iniciar bot
+Write-Host "[7/7] Iniciando bot..." -ForegroundColor Green
+ssh root@${VPS_IP} "cd ${REMOTE_DIR}; docker-compose up -d"
+
+# Verificar estado
+Write-Host ""
+Write-Host "Verificando estado del bot..." -ForegroundColor Cyan
+Start-Sleep -Seconds 3
+$status = ssh root@${VPS_IP} "docker ps --filter name=smc_fusion_ccxt_bot --format '{{.Status}}'"
+
+if ($status) {
+    Write-Host "Bot desplegado exitosamente!" -ForegroundColor Green
+    Write-Host "Estado: $status" -ForegroundColor White
+}
+else {
+    Write-Host "Advertencia: El contenedor no esta corriendo" -ForegroundColor Yellow
+    Write-Host "Revisa los logs con: ssh root@${VPS_IP} 'docker logs smc_fusion_ccxt_bot'" -ForegroundColor Cyan
+}
 
 Write-Host ""
-Write-Host "✅ ¡Bot desplegado exitosamente!" -ForegroundColor Green
-Write-Host ""
-Write-Host "📊 Comandos útiles:" -ForegroundColor Cyan
-Write-Host "   Ver logs:  ssh root@${VPS_IP} 'docker logs -f smc_fusion_ccxt_bot'" -ForegroundColor White
-Write-Host "   Detener:   ssh root@${VPS_IP} 'cd ${REMOTE_DIR} && docker-compose down'" -ForegroundColor White
-Write-Host "   Reiniciar: ssh root@${VPS_IP} 'cd ${REMOTE_DIR} && docker-compose restart'" -ForegroundColor White
-Write-Host ""
-Write-Host "💡 IMPORTANTE: Edita el archivo .env.ccxt con tus credenciales de API antes de desplegar!" -ForegroundColor Yellow
+Write-Host "Comandos utiles:" -ForegroundColor Cyan
+Write-Host "  Ver logs:  ssh root@${VPS_IP} 'docker logs -f smc_fusion_ccxt_bot'" -ForegroundColor White
+Write-Host "  Detener:   ssh root@${VPS_IP} 'cd ${REMOTE_DIR}; docker-compose down'" -ForegroundColor White
+Write-Host "  Reiniciar: ssh root@${VPS_IP} 'cd ${REMOTE_DIR}; docker-compose restart'" -ForegroundColor White
 Write-Host ""
